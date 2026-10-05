@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SlideCraft — Precision PDF to Editable PowerPoint</title>
+  <meta name="description" content="Convert any PDF into a 100% editable PowerPoint presentation with native text boxes, high-resolution picture shapes, and precision layout reconstruction.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="header">
+    <div class="container nav-wrap">
+      <a href="#" class="brand-logo" id="brandLogo">
+        <div class="logo-mark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="14" height="14" rx="2"></rect>
+            <path d="M7 21h12a2 2 0 0 0 2-2V7"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">SlideCraft</span>
+        </div>
+      </a>
+
+      <div class="nav-actions">
+        <div id="aiStatusPill" class="engine-pill" title="AI Vision Layout Engine Status">
+          <span class="status-dot"></span>
+          <span id="aiStatusText">Gemini Vision Active</span>
+        </div>
+
+        <button class="btn-subtle" id="openSettingsBtn" title="Configure AI engine settings">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Settings</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <main class="container">
+    <section class="hero">
+      <div class="hero-tag">
+        <span class="tag-dot"></span>
+        <span>Vector & Layout Decomposition</span>
+      </div>
+      <h1 class="hero-title">PDF to native PowerPoint, <span class="hero-subtext">crafted with precision.</span></h1>
+      <p class="hero-desc">
+        Deconstruct documents into independent visual elements and editable typography. Clean bounding boxes, true aspect ratios, and zero formatting corruption.
+      </p>
+    </section>
+
+    <!-- Main Converter Workspace Card -->
+    <div class="converter-box" id="converterCard">
+      <!-- Drag & Drop Zone -->
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" multiple accept=".pdf" style="display: none;">
+        <div class="dropzone-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+        </div>
+        <div class="dropzone-title">Drop your PDF documents here</div>
+        <div class="dropzone-desc">Decks, presentation slides, and reports up to 50 MB</div>
+        <button type="button" class="btn-subtle" id="browseBtn">
+          <span>Choose PDF Files</span>
+        </button>
+      </div>
+
+      <!-- File Queue List -->
+      <div class="file-list" id="fileList" style="display: none;">
+        <!-- Injected dynamically via JS -->
+      </div>
+
+      <!-- Conversion Options Panel -->
+      <div class="options-panel" id="optionsPanel">
+        <!-- Conversion Mode -->
+        <div class="option-group">
+          <label class="option-label" for="conversionModeSelect">
+            <span>Conversion Mode</span>
+          </label>
+          <select id="conversionModeSelect" class="select-custom">
+            <option value="visual" selected>Visual Layering (High-fidelity picture elements)</option>
+            <option value="editable">Editable Typography (Native text boxes & picture shapes)</option>
+          </select>
+          <div class="option-hint" id="conversionModeHint">
+            Deconstructs slides into separate, high-resolution picture shapes. 100% visual fidelity.
+          </div>
+        </div>
+
+        <!-- Slide Aspect Ratio -->
+        <div class="option-group">
+          <label class="option-label" for="ratioSelect">
+            <span>Aspect Ratio</span>
+          </label>
+          <select id="ratioSelect" class="select-custom">
+            <option value="16:9" selected>16:9 Widescreen (Modern default)</option>
+            <option value="4:3">4:3 Traditional presentation</option>
+            <option value="auto">Auto-detect from PDF dimensions</option>
+          </select>
+        </div>
+
+        <!-- AI Layout Reconstruction -->
+        <div class="option-group">
+          <label class="option-label" for="aiToggle">
+            <span>AI Layout Analysis</span>
+          </label>
+          <div class="toggle-wrapper">
+            <span class="toggle-label">Intelligent element hierarchy</span>
+            <label class="switch">
+              <input type="checkbox" id="aiToggle" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- AI Model Selection -->
+        <div class="option-group" id="modelSelectGroup">
+          <label class="option-label" for="modelSelect">
+            <span>Vision Model</span>
+          </label>
+          <select id="modelSelect" class="select-custom">
+            <option value="gemini-3.6-flash" selected>Gemini 3.6 Flash (Recommended)</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash (Stable)</option>
+            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ultra Fast)</option>
+            <option value="gemini-3.8-flash">Gemini 3.8 Flash (Latest)</option>
+            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Fast)</option>
+            <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+          </select>
+        </div>
+
+        <!-- Slide Typography -->
+        <div class="option-group" id="typographyGroup">
+          <label class="option-label" for="headingFontSelect">
+            <span>Typography System</span>
+          </label>
+          <div class="typography-cols">
+            <div>
+              <span class="typography-sublabel">Headings:</span>
+              <select id="headingFontSelect" class="select-custom select-compact">
+                <option value="auto" selected>Auto-detect (Match PDF)</option>
+                <option value="Century Gothic">Century Gothic (Geometric)</option>
+                <option value="Segoe UI">Segoe UI (Clean Tech)</option>
+                <option value="Aptos">Aptos (Modern Office)</option>
+                <option value="Calibri">Calibri (Standard)</option>
+                <option value="Arial">Arial (Neutral)</option>
+                <option value="Georgia">Georgia (Editorial Serif)</option>
+                <option value="Trebuchet MS">Trebuchet MS (Warm Sans)</option>
+                <option value="Impact">Impact (Bold Display)</option>
+              </select>
+            </div>
+            <div>
+              <span class="typography-sublabel">Body:</span>
+              <select id="bodyFontSelect" class="select-custom select-compact">
+                <option value="auto" selected>Auto-detect (Match PDF)</option>
+                <option value="Century Gothic">Century Gothic (Geometric)</option>
+                <option value="Segoe UI">Segoe UI (Clean Tech)</option>
+                <option value="Calibri">Calibri (Standard)</option>
+                <option value="Arial">Arial (Neutral)</option>
+                <option value="Georgia">Georgia (Editorial Serif)</option>
+                <option value="Consolas">Consolas (Code/Technical)</option>
+              </select>
+            </div>
+          </div>
+          <div class="option-hint">
+            Universal typography prevents font replacement on external computers.
+          </div>
+        </div>
+
+        <!-- Page Range Selection -->
+        <div class="option-group">
+          <label class="option-label" for="pageRangeInput">
+            <span>Page Range</span>
+          </label>
+          <input type="text" id="pageRangeInput" class="input-custom" placeholder="All, or e.g. 1-4, 7, 9">
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <div class="convert-action-wrap">
+        <button type="button" class="btn-primary" id="convertBtn" disabled>
+          <span id="convertBtnText">Convert to PowerPoint</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Progress Section (Shown during conversion) -->
+    <div class="progress-card" id="progressCard">
+      <div class="progress-top">
+        <div class="progress-info">
+          <div class="spinner"></div>
+          <div>
+            <div class="progress-title" id="progressTitle">Converting Document...</div>
+            <div class="progress-status-sub" id="progressStatusText">Initializing pipeline...</div>
+          </div>
+        </div>
+        <div class="progress-pct" id="progressPct">0%</div>
+      </div>
+
+      <!-- Stepper Indicator -->
+      <div class="pipeline-stepper">
+        <div class="step-node" id="step1">
+          <div class="step-dot">1</div>
+          <span class="step-name">Render</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-node" id="step2">
+          <div class="step-dot">2</div>
+          <span class="step-name">Segment</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-node" id="step3">
+          <div class="step-dot">3</div>
+          <span class="step-name">Build Slides</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step-node" id="step4">
+          <div class="step-dot">4</div>
+          <span class="step-name">Complete</span>
+        </div>
+      </div>
+
+      <!-- Linear Progress Track -->
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressBar"></div>
+      </div>
+    </div>
+
+    <!-- Results Section (Shown after conversion) -->
+    <div class="results-card" id="resultsCard">
+      <div class="results-header">
+        <div class="results-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <div>
+          <h2 class="results-title">Conversion Complete</h2>
+          <p class="results-subtitle">Slides are structured with independent picture elements and background geometry.</p>
+        </div>
+      </div>
+
+      <div class="results-list" id="resultsList">
+        <!-- Injected dynamically via JS -->
+      </div>
+
+      <div class="results-actions">
+        <button type="button" class="btn-subtle" id="convertAnotherBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <polyline points="23 20 23 14 17 14"></polyline>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+          </svg>
+          <span>Convert Another Document</span>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Page Preview Modal -->
+  <div class="modal-overlay" id="previewModal" style="display: none;">
+    <div class="modal-content modal-content-wide">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="previewModalTitle">Select Pages to Convert</div>
+          <div class="modal-subtitle" id="previewModalSubtitle">Click pages to toggle selection</div>
+        </div>
+        <button class="modal-close" id="closePreviewBtn" title="Close preview">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="preview-grid" id="previewGrid">
+          <!-- Page cards injected here -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <button class="btn-subtle btn-sm" id="selectAllPagesBtn">Select All</button>
+          <button class="btn-subtle btn-sm" id="deselectAllPagesBtn">Deselect All</button>
+        </div>
+        <div class="modal-footer-right">
+          <span class="selection-count-text" id="selectedPagesCount">0 pages selected</span>
+          <button class="btn-primary btn-sm" id="applyPageSelectionBtn">
+            Apply Selection
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Slide Region Inspector Modal -->
+  <div class="modal-overlay" id="regionEditorModal" style="display: none; z-index: 1050;">
+    <div class="modal-content modal-content-inspector">
+      <!-- Header -->
+      <div class="modal-header inspector-header">
+        <div class="inspector-header-left">
+          <div class="modal-title" id="regionEditorTitle">
+            <span>Slide Region Inspector</span>
+            <span class="badge-slide" id="regionEditorPageBadge">Slide 1</span>
+          </div>
+          <div class="modal-subtitle" id="regionEditorSubtitle">
+            Click badge to toggle Text / Graphic. Drag handles to resize. Drag canvas to draw new region.
+          </div>
+        </div>
+
+        <!-- Toolbar Buttons -->
+        <div class="inspector-toolbar">
+          <button type="button" class="btn-toolbar btn-autodetect" id="editorAutoDetectBtn" title="Run Gemini Vision to auto-detect elements">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"></path>
+            </svg>
+            <span id="editorAutoDetectText">Auto-Detect</span>
+          </button>
+
+          <button type="button" class="btn-toolbar btn-type-text" id="editorAddTextBtn" title="Draw a new Text Box">
+            <span class="tool-dot text-dot"></span>
+            <span>+ Text Box</span>
+          </button>
+
+          <button type="button" class="btn-toolbar btn-type-graphic" id="editorAddPicBtn" title="Draw a new Graphic Shape">
+            <span class="tool-dot graphic-dot"></span>
+            <span>+ Graphic</span>
+          </button>
+
+          <button type="button" class="btn-toolbar btn-type-table" id="editorAddTableBtn" title="Draw a new Data Table">
+            <span class="tool-dot table-dot" style="background: #8b5cf6;"></span>
+            <span>+ Table</span>
+          </button>
+
+          <button type="button" class="btn-toolbar btn-delete" id="editorDeleteBoxBtn" title="Delete selected box">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            <span>Delete</span>
+          </button>
+
+          <button type="button" class="btn-primary btn-sm" id="editorSaveBtn">
+            <span>Save Slide Regions</span>
+          </button>
+
+          <button class="modal-close" id="closeRegionEditorBtn" title="Close inspector">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Canvas Body -->
+      <div class="inspector-workbench">
+        <div id="regionCanvasContainer" class="region-canvas-container">
+          <img id="regionEditorImg" src="" alt="Slide Preview" class="region-editor-img">
+          <div id="regionOverlayLayer" class="region-overlay-layer">
+            <!-- Dynamic region boxes rendered here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer / Status Bar -->
+      <div class="modal-footer inspector-footer">
+        <div id="regionStatsLabel" class="inspector-stats">
+          <span class="stat-item">
+            <span class="stat-indicator text-indicator"></span>
+            <span id="regionCountText">0 Text Boxes</span>
+          </span>
+          <span class="stat-item">
+            <span class="stat-indicator graphic-indicator"></span>
+            <span id="regionCountGraphic">0 Graphic Shapes</span>
+          </span>
+          <span class="stat-item">
+            <span class="stat-indicator table-indicator" style="background: #8b5cf6;"></span>
+            <span id="regionCountTable">0 Tables</span>
+          </span>
+        </div>
+        <div class="inspector-keyboard-hint">
+          Click badge to toggle Text/Graphic • Drag handles to adjust • Backspace/Del to remove
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings / Gemini API Key Modal -->
+  <div class="modal-overlay" id="settingsModal" style="display: none;">
+    <div class="modal-content modal-content-sm">
+      <div class="modal-header">
+        <div class="modal-title">AI Engine Settings</div>
+        <button class="modal-close" id="closeSettingsBtn" title="Close settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-hint-text">
+          Configure Google Gemini Vision for slide segmentation and typography detection.
+        </p>
+
+        <div class="option-group" style="margin-bottom: 16px;">
+          <label class="option-label" for="geminiApiKeyInput">Gemini API Key</label>
+          <input type="password" id="geminiApiKeyInput" class="input-custom" placeholder="AIzaSy... or AQ....">
+          <div class="option-hint">
+            The server's configured environment key is used by default if left blank.
+          </div>
+        </div>
+
+        <div class="option-group" style="margin-bottom: 16px;">
+          <label class="option-label" for="settingsModelSelect">Default AI Model</label>
+          <select id="settingsModelSelect" class="select-custom">
+            <option value="gemini-3.6-flash" selected>Gemini 3.6 Flash (Recommended)</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash (Stable)</option>
+            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ultra Fast)</option>
+            <option value="gemini-3.8-flash">Gemini 3.8 Flash (Latest)</option>
+            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Fast)</option>
+            <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+          </select>
+        </div>
+
+        <div class="api-test-row">
+          <button type="button" class="btn-subtle btn-sm" id="testApiKeyBtn">Test Key Connection</button>
+          <span id="apiKeyTestStatus" class="api-test-status"></span>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end;">
+        <button type="button" class="btn-primary btn-sm" id="saveSettingsBtn">
+          Save Settings
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Scripts -->
+  <script src="js/region_editor.js"></script>
+  <script src="js/preview.js"></script>
+  <script src="js/progress.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

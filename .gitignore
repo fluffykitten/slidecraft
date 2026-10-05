@@ -1,0 +1,40 @@
+﻿# Secrets & Environment variables
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Uploads & Outputs (temporary user conversion data)
+uploads/*
+!uploads/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS artifacts
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Temporary scratch & test artifacts
+check_p13.py
+scratch/
+test_*.py
+*.pptx
+*.pdf
