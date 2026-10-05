@@ -1,120 +1,241 @@
-# SlideCraft — PDF to Editable PowerPoint Converter
+<div align="center">
 
-A modern, high-fidelity web application that converts PDF documents into **100% editable Microsoft PowerPoint presentations (`.pptx`)**. Unlike traditional OCR converters that mangle fonts, misalign words, and produce messy floating text boxes, SlideCraft uses **Intelligent Visual Element Decomposition**:
-- **Independent Picture Shapes**: Headers, title cards, diagrams, content columns, illustrations, badges, and citations are extracted as separate high-resolution picture shapes positioned at their exact original coordinates.
-- **100% Visual Fidelity**: Mathematical formulas, chemical structures, custom brand fonts, and graphics retain their crisp, original look with zero OCR distortion.
-- **Movable & Rearrangeable**: Every element can be selected, moved, resized, replaced, reordered, or deleted in Microsoft PowerPoint, Google Slides, Keynote, and LibreOffice Impress.
-- **Clean Slide Background**: Detects and applies the slide's dominant background color behind the elements.
-- **Gemini Vision Intelligence**: Leverages Google Gemini Vision to understand slide layout structure and identify semantic blocks with multi-model fallback.
-- **Smart Algorithmic Fallback**: When offline or if an API key is not configured, automatic perimeter sampling and layout detection ensure dependable conversions.
+# SlideCraft ⚡
+### High-Fidelity PDF to Editable PowerPoint Presentation Converter
 
----
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Google Gemini](https://img.shields.io/badge/Gemini_Vision-AI_Powered-8E75C2?style=for-the-badge&logo=google&logoColor=white)](https://aistudio.google.com)
+[![PowerPoint](https://img.shields.io/badge/Microsoft_PowerPoint-PPTX_Native-D04423?style=for-the-badge&logo=microsoftpowerpoint&logoColor=white)](https://products.office.com/powerpoint)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-## Features
+*Transform locked PDFs into clean, beautiful, and fully editable PowerPoint presentations without mangled fonts, awkward line breaks, or lost illustrations.*
 
-1. **Independent Picture Elements**: Header banners, cards, diagrams, and illustrations are cropped into individual picture shapes you can move, resize, replace, or rearrange in PowerPoint.
-2. **Zero OCR Formatting Loss**: Say goodbye to broken text blocks, bad line wrapping, and mismatched font replacements.
-3. **Visual Slide Preview & Page Range Selection**: Render interactive thumbnails of your PDF pages before converting. Select/deselect specific pages or specify custom ranges (e.g. `1-3, 5, 8-10`).
-4. **Batch Conversion**: Upload multiple PDF documents at once and convert them in parallel.
-5. **Slide Aspect Ratio Controls**: Choose between `16:9 Widescreen` (default modern standard), `4:3 Standard`, or `Auto` (matches source PDF aspect ratio).
-6. **Real-time Live Progress via SSE**: Server-Sent Events stream live status through the 4 pipeline stages (Render Slide → AI Element Segmentation → Build Slides → Ready).
-7. **Sleek Modern UI**: Premium glassmorphic dark theme, responsive layout, and smooth micro-animations.
+[Features](#-key-features) • [Quick Start](#-quick-start) • [Architecture](#-architecture--pipeline) • [Region Editor](#-interactive-slide-region-editor) • [API](#-api-endpoints) • [License](#-license)
+
+</div>
 
 ---
 
-## Architecture
+## 💡 The Problem SlideCraft Solves
 
-```
-pdf-to-ppt/
-├── backend/
-│   ├── main.py                  # FastAPI server, SSE stream & REST endpoints
-│   ├── config.py                # Environment and storage configuration
-│   ├── requirements.txt         # Python library dependencies
-│   ├── models/
-│   │   └── schemas.py           # Pydantic models for extraction & tasks
-│   └── services/
-│       ├── pdf_extractor.py     # PyMuPDF text, styles & image extractor
-│       ├── ai_analyzer.py       # Gemini 2.5 Flash layout analysis + fallback
-│       ├── coordinate_mapper.py # PDF points to PPTX Inches / Pt conversion
-│       ├── pptx_builder.py      # python-pptx native slide assembler
-│       └── converter.py         # Asynchronous task orchestrator
-├── frontend/
-│   ├── index.html               # Main application interface
-│   ├── css/
-│   │   └── styles.css           # Glassmorphism dark design system
-│   └── js/
-│       ├── app.js               # Main application logic & event handlers
-│       ├── preview.js           # Visual PDF page selector with thumbnails
-│       └── progress.js          # Live SSE progress bar & status tracker
-├── uploads/                     # Working directory for uploaded files
-├── outputs/                     # Generated .pptx presentations
-├── .env.example                 # Sample configuration
-└── README.md
-```
+Traditional PDF-to-PowerPoint tools force an impossible compromise:
+* **Generic OCR Converters** chop single sentences into multiple hard-wrapped lines, mangle complex headings, turn charts and chemical/mathematical formulas into unreadable garbage, and replace fonts with misaligned browser defaults.
+* **Image Exporters** simply screenshot entire pages, leaving slides non-editable and useless for presentations.
+
+**SlideCraft introduces a Hybrid Decomposition Engine**:
+1. **Semantic Text & Typography Engine**: Continuous prose sentences stay intact as native paragraphs that reflow smoothly when edited in PowerPoint. Headings, body text, bullets, and badges retain their proportional sizing and formatting.
+2. **Moveable Picture Elements**: Illustrations, icons, chemical bonds, and diagrams are cleanly cropped into high-resolution, transparent picture shapes placed at their exact slide coordinates.
+3. **Interactive Region Inspector**: A built-in visual canvas lets you inspect, draw, resize, and reclassify custom regions (Text Box, Picture Shape, Data Table) for each slide before exporting.
+4. **Native Table Reconstruction**: Data matrices and comparison grids are exported as true PowerPoint tables with theme styling and column alignments.
 
 ---
 
-## Getting Started
+## ✨ Key Features
+
+* **🎯 Interactive Region Editor**: Open any slide in a visual inspector. Draw custom bounding boxes with one click (`Text Box`, `Picture Shape`, `Data Table`), or click **Auto-Detect** to let Gemini Vision segment elements automatically.
+* **📝 Semantic Paragraph Reflow**: No artificial line-breaks. Multi-line descriptions and card paragraphs reflow naturally when widened, edited, or restyled in Microsoft PowerPoint, Google Slides, Keynote, or LibreOffice.
+* **📐 Typography-Accurate Font Fitting**: Mathematical bounding-box calculation simulates true word-wrapping, preventing font crushing and guaranteeing zero mid-word hyphenation.
+* **🖼️ Clean Element Separation**: Diagrams, icons, and illustrations are cropped into standalone shapes you can move, resize, replace, or delete.
+* **📊 Styled PowerPoint Tables**: Exports data tables with column alignments (left for text, right for numeric data) and custom header fills.
+* **🏷️ Badge & Card Detection**: Automatically recognizes solid-fill cards and pills (e.g. status tags, warning cards), applying native PowerPoint rounded rectangle shapes and theme colors.
+* **⚡ Live Real-Time Progress via SSE**: Server-Sent Events (SSE) stream live conversion progress across all pipeline stages with second-by-second feedback.
+* **🎨 Minimalist Glassmorphic UI**: Ultra-clean, modern interface designed with native CSS, dark mode aesthetics, and zero unnecessary visual clutter.
+* **🔒 Privacy-First**: Files are processed locally on your server. Documents are stored in temporary working folders and cleaned up automatically.
+
+---
+
+## 🚀 Quick Start
 
 ### 1. Prerequisites
-- Python 3.10+ (Tested with Python 3.14)
-- (Optional) Google Gemini API Key (Get a free key at [Google AI Studio](https://aistudio.google.com/))
+* **Python 3.10+** (Tested on Python 3.10, 3.11, 3.12, 3.13, 3.14)
+* *(Optional)* A free **Google Gemini API Key** from [Google AI Studio](https://aistudio.google.com/) for AI-powered vision segmentation and OCR.
 
-### 2. Setup Virtual Environment & Dependencies
-
+### 2. Clone the Repository
 ```bash
-# Create and activate virtual environment
+git clone https://github.com/fluffykitten/slidecraft.git
+cd slidecraft
+```
+
+### 3. Create a Virtual Environment & Install Dependencies
+```bash
+# Create virtual environment
 python -m venv venv
 
-# Windows PowerShell:
+# Activate (Windows PowerShell):
 .\venv\Scripts\Activate.ps1
+
+# Activate (macOS / Linux):
+source venv/bin/activate
 
 # Install requirements
 pip install -r backend/requirements.txt
 ```
 
-### 3. Configure Gemini API Key (Optional)
+### 4. Configuration (Optional)
+Copy the example environment file:
+```bash
+cp .env.example .env
+```
+Edit `.env` to configure your settings:
+```env
+# Optional: System-wide Gemini API Key (can also be entered directly in the web UI)
+GEMINI_API_KEY=your_api_key_here
 
-You can set your Gemini API key in two ways:
-1. **Via `.env` file**:
-   ```bash
-   cp .env.example .env
-   # Add your key to .env:
-   # GEMINI_API_KEY=AIzaSy...
-   ```
-2. **Directly in the Web UI**: Click the **"AI Settings"** button in the top navigation bar and enter your key. It will be securely stored in your browser's local storage and used for conversions.
+# Server settings
+MAX_FILE_SIZE_MB=50
+MAX_PAGES=100
+MAX_CONCURRENT_TASKS=3
+UPLOAD_DIR=./uploads
+OUTPUT_DIR=./outputs
+```
 
-*Note: If no API key is provided, SlideCraft automatically uses its built-in rule-based layout analyzer.*
+> **Note**: An API key is optional! If no Gemini API key is provided, SlideCraft operates seamlessly using its built-in rule-based layout analyzer.
 
-### 4. Run the Application
-
+### 5. Launch the Application
 ```bash
 # Windows PowerShell:
 .\venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+
+# macOS / Linux:
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Open your browser and navigate to:
-**[http://127.0.0.1:8000](http://127.0.0.1:8000)**
+👉 **[http://127.0.0.1:8000](http://127.0.0.1:8000)**
 
 ---
 
-## Conversion Pipeline
+## 🎨 Interactive Slide Region Editor
+
+When uploading a PDF, SlideCraft generates an interactive thumbnail preview of every slide:
+
+1. **Inspect Any Slide**: Click the **"Select Regions"** button on any slide card.
+2. **Auto-Detect AI Elements**: Click **"Auto-Detect"** to have Gemini analyze layout structure, separating text from illustrations and tables.
+3. **Draw & Adjust Custom Regions**:
+   * 🟦 **Text Box**: Draw over titles, card descriptions, or bullet lists to turn them into editable PowerPoint text with intelligent font sizing.
+   * 🟩 **Picture Shape**: Draw over diagrams, formulas, logos, or illustrations to crop them into moveable vector-sharp pictures.
+   * 🟪 **Data Table**: Draw over tables to export them as native editable PowerPoint tables.
+4. **Drag, Resize, or Delete**: Adjust bounding boxes with precision handles.
+5. **Save & Convert**: Hit **"Save Regions"**, and your custom layout blueprint is applied during conversion!
+
+---
+
+## 🏗️ Architecture & Pipeline
 
 ```
-1. Extract (PyMuPDF)
-   ├── Text blocks with font name, size, color, bold/italic, bounding boxes
-   ├── High-res embedded images and raster positions
-   └── Vector fill shapes, cards, and page dimensions
-         ↓
-2. Analyze (Gemini 2.5 / Algorithmic)
-   ├── Identifies semantic roles (title, subtitle, heading, body, bullet, caption)
-   └── Merges fragmented lines into unified multi-line paragraphs
-         ↓
-3. Map Coordinates (CoordinateMapper)
-   ├── Translates PDF points to PowerPoint Inches / EMUs
-   └── Scales font sizes and adds layout width buffers
-         ↓
-4. Build PPTX (python-pptx)
-   ├── Creates editable TextBox shapes with formatting & word wrapping
-   └── Inserts native Picture shapes and vector cards
+                              PDF Upload
+                                  │
+                                  ▼
+                   ┌──────────────────────────────┐
+                   │   PDF Rendering & Parsing    │
+                   │         (PyMuPDF)            │
+                   └──────────────┬───────────────┘
+                                  │
+                  ┌───────────────┴───────────────┐
+                  ▼                               ▼
+       User Custom Regions?               AI Decomposition
+    (Region Inspector Canvas)          (Gemini Vision Engine)
+                  │                               │
+                  └───────────────┬───────────────┘
+                                  │
+                                  ▼
+                   ┌──────────────────────────────┐
+                   │    Structured OCR & Fit      │
+                   │ • Physical Scale Calibration │
+                   │ • Semantic Paragraph Reflow  │
+                   │ • Container Pill & Card Fills│
+                   │ • Table Alignment & Themes   │
+                   └──────────────┬───────────────┘
+                                  │
+                                  ▼
+                   ┌──────────────────────────────┐
+                   │    Native PPTX Assembler     │
+                   │        (python-pptx)         │
+                   │ • Bounding Box Mapping       │
+                   │ • <a:normAutofit/> XML Guard │
+                   │ • Rounded Card Shapes        │
+                   │ • Styled PowerPoint Tables   │
+                   └──────────────┬───────────────┘
+                                  │
+                                  ▼
+                         Editable .pptx Deck
 ```
+
+---
+
+## 📂 Project Structure
+
+```
+slidecraft/
+├── backend/
+│   ├── main.py                  # FastAPI application & REST endpoints
+│   ├── config.py                # Environment configuration & limits
+│   ├── requirements.txt         # Python dependencies
+│   ├── models/
+│   │   └── schemas.py           # Pydantic models (TextBlock, ExtractedTable, etc.)
+│   └── services/
+│       ├── ai_analyzer.py       # Gemini Vision decomposition & calibrated OCR
+│       ├── converter.py         # Async task manager & background pipeline
+│       ├── coordinate_mapper.py # PDF points to PPTX dimensions & DPI scaling
+│       ├── pdf_extractor.py     # High-res PyMuPDF slide renderer
+│       └── pptx_builder.py      # python-pptx presentation assembler
+├── frontend/
+│   ├── index.html               # Minimalist presentation interface
+│   ├── css/
+│   │   └── styles.css           # Modern design tokens & layout
+│   └── js/
+│       ├── app.js               # Application orchestration & API requests
+│       ├── preview.js           # Slide thumbnail grid & page range selector
+│       ├── progress.js          # Live SSE progress bar & status notifications
+│       └── region_editor.js     # Interactive visual region inspector canvas
+├── uploads/                     # Temporary storage for uploaded documents
+├── outputs/                     # Generated presentation decks
+├── .env.example                 # Example configuration template
+└── README.md
+```
+
+---
+
+## 🔌 API Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/convert` | Starts background conversion. Accepts PDF file, conversion mode, slide ratio, and custom regions. |
+| `GET` | `/api/tasks/{task_id}/progress` | Server-Sent Events (SSE) live progress stream. |
+| `GET` | `/api/tasks/{task_id}/download` | Downloads the generated `.pptx` file. |
+| `POST` | `/api/preview` | Generates thumbnail previews and metadata for all pages in a PDF. |
+| `POST` | `/api/detect-slide-regions` | Runs Gemini Vision layout detection on a single slide for the Region Editor. |
+| `POST` | `/api/validate-key` | Validates a user-supplied Gemini API key. |
+
+---
+
+## 🛠️ Technology Stack
+
+* **Backend**: [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://www.uvicorn.org/), [Pydantic v2](https://docs.pydantic.dev/)
+* **Document Processing**: [PyMuPDF (fitz)](https://pymupdf.readthedocs.io/), [Pillow (PIL)](https://python-pillow.org/)
+* **Presentation Generation**: [python-pptx](https://python-pptx.readthedocs.io/)
+* **AI Intelligence**: [Google GenAI SDK](https://github.com/google-gemini/generative-ai-python) (`gemini-3.5-flash-lite`, `gemini-2.5-flash`)
+* **Frontend**: Vanilla JavaScript (ES6+), HTML5 Canvas, Modern CSS Custom Properties
+
+---
+
+## 🤝 Contributing
+
+Contributions, feature requests, and bug reports are welcome!
+1. Fork the Project.
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`).
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`).
+4. Push to the Branch (`git push origin feature/AmazingFeature`).
+5. Open a Pull Request.
+
+---
+
+## 📄 License
+
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+
+<div align="center">
+Made with ❤️ for clean, editable presentations.
+</div>
+
