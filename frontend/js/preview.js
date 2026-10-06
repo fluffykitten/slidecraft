@@ -139,6 +139,8 @@ class PreviewManager {
       const inspectBtn = card.querySelector('.btn-inspect-slide');
       inspectBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        const modeSelect = document.getElementById('conversionModeSelect');
+        const currentMode = modeSelect ? modeSelect.value : 'visual';
         this.regionEditor.open(
           this.currentFile,
           p.page_num,
@@ -147,7 +149,8 @@ class PreviewManager {
           (pageNum, regions) => {
             this.customRegions[pageNum] = regions;
             this.updateCustomRegionBadges();
-          }
+          },
+          currentMode
         );
       });
 
@@ -158,13 +161,15 @@ class PreviewManager {
   }
 
   updateCustomRegionBadges() {
+    const modeSelect = document.getElementById('conversionModeSelect');
+    const isVisual = !modeSelect || modeSelect.value === 'visual';
     Object.keys(this.customRegions).forEach((pageNumStr) => {
       const pageNum = parseInt(pageNumStr, 10);
       const regions = this.customRegions[pageNum];
       const badge = document.getElementById(`customBadge_${pageNum}`);
       if (badge) {
         if (regions && regions.length > 0) {
-          badge.textContent = `${regions.length} Custom Regions`;
+          badge.textContent = isVisual ? `${regions.length} Picture Layers` : `${regions.length} Custom Regions`;
           badge.style.display = 'inline-flex';
         } else {
           badge.style.display = 'none';

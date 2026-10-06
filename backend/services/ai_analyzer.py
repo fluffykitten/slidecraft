@@ -4,8 +4,8 @@ import json
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from collections import Counter
-from PIL import Image
+from collections import Counter, deque
+from PIL import Image, ImageDraw
 from google import genai
 from google.genai import types
 
@@ -76,10 +76,22 @@ class AIAnalyzer:
             try:
                 return self._decompose_slide_elements(page, conversion_mode)
             except Exception as e:
-                logger.warning(f"Gemini slide element decomposition failed for page {page.page_num}: {e}. Falling back to rule-based.")
-                return self._decompose_rule_based(page)
-        else:
-            return self._decompose_rule_based(page)
+                logger.warning(f"Gemini slide element decomposition failed for page {page.page_num}: {e}. Falling back to heuristic/rule-based.")
+
+        # Heuristic visual decomposition fallback for visual mode
+        if conversion_mode == "visual" and page.full_render_path:
+            try:
+                detection = self._detect_slide_elements_heuristic(
+                    page.full_render_path, page.width, page.height, conversion_mode=conversion_mode
+                )
+                heuristic_elements = detection.get("elements", [])
+                if heuristic_elements and len(heuristic_elements) >= 1:
+                    logger.info(f"[AIAnalyzer] Using {len(heuristic_elements)} heuristic vision layers for Page {page.page_num}")
+                    return self._process_elements(page, heuristic_elements, conversion_mode=conversion_mode)
+            except Exception as h_err:
+                logger.warning(f"Heuristic visual decomposition failed on page {page.page_num}: {h_err}")
+
+        return self._decompose_rule_based(page)
 
     @staticmethod
     def _normalize_box_2d(raw_box: Any) -> Optional[List[int]]:
@@ -122,25 +134,316 @@ class AIAnalyzer:
                 return None
         return None
 
+    @staticmethod
+    def _snap_bbox_to_whitespace(
+        img: Image.Image,
+        cx0: int,
+        cy0: int,
+        cx1: int,
+        cy1: int,
+        bg_rgb: Optional[Tuple[int, int, int]] = (255, 255, 255),
+        max_expand_x: int = 45,
+        max_expand_y: int = 30
+    ) -> Tuple[int, int, int, int]:
+        """
+        Computer vision whitespace boundary snapping:
+        If an element bounding box cuts through ink (pixels differing from slide background),
+        iteratively expands outward until it lands on clean whitespace or hits the safety threshold.
+        Guarantees letters, chemical symbols, bullet points, and doodles are never sliced in half.
+        """
+        w, h = img.size
+        bg = bg_rgb or (255, 255, 255)
+
+        def is_ink_col(x: int, y_start: int, y_end: int) -> bool:
+            if x < 0 or x >= w:
+                return False
+            ink_count = 0
+            step = max(1, (y_end - y_start) // 60)
+            for y in range(y_start, y_end, step):
+                px = img.getpixel((x, y))
+                diff = abs(px[0] - bg[0]) + abs(px[1] - bg[1]) + abs(px[2] - bg[2])
+                if diff > 40:
+                    ink_count += 1
+                    if ink_count >= 2:
+                        return True
+            return False
+
+        def is_ink_row(y: int, x_start: int, x_end: int) -> bool:
+            if y < 0 or y >= h:
+                return False
+            ink_count = 0
+            step = max(1, (x_end - x_start) // 60)
+            for x in range(x_start, x_end, step):
+                px = img.getpixel((x, y))
+                diff = abs(px[0] - bg[0]) + abs(px[1] - bg[1]) + abs(px[2] - bg[2])
+                if diff > 40:
+                    ink_count += 1
+                    if ink_count >= 2:
+                        return True
+            return False
+
+        # Expand left (cx0)
+        for _ in range(max_expand_x):
+            if not is_ink_col(cx0, cy0, cy1):
+                break
+            if cx0 <= 0:
+                break
+            cx0 -= 1
+
+        # Expand right (cx1)
+        for _ in range(max_expand_x):
+            if not is_ink_col(cx1, cy0, cy1):
+                break
+            if cx1 >= w - 1:
+                break
+            cx1 += 1
+
+        # Expand top (cy0)
+        for _ in range(max_expand_y):
+            if not is_ink_row(cy0, cx0, cx1):
+                break
+            if cy0 <= 0:
+                break
+            cy0 -= 1
+
+        # Expand bottom (cy1)
+        for _ in range(max_expand_y):
+            if not is_ink_row(cy1, cx0, cx1):
+                break
+            if cy1 >= h - 1:
+                break
+            cy1 += 1
+
+        return max(0, cx0), max(0, cy0), min(w, cx1), min(h, cy1)
+
+    @staticmethod
+    def _make_transparent_background(
+        crop_img: Image.Image,
+        bg_rgb: Optional[Tuple[int, int, int]] = (255, 255, 255),
+        tolerance: int = 25
+    ) -> Image.Image:
+        """
+        Alpha masking for standalone illustrations and doodles:
+        Converts exterior background connected to the borders into transparent alpha (0),
+        allowing generous crop padding without opaque white boxes obscuring neighboring elements.
+        """
+        if crop_img.mode != "RGBA":
+            crop_img = crop_img.convert("RGBA")
+
+        bg = bg_rgb or (255, 255, 255)
+        bg_lum = bg[0] * 0.299 + bg[1] * 0.587 + bg[2] * 0.114
+        # Only apply on light/clean backgrounds
+        if bg_lum < 180:
+            return crop_img
+
+        w, h = crop_img.size
+        transparent = (bg[0], bg[1], bg[2], 0)
+        sample_points = [
+            (0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1),
+            (w // 2, 0), (w // 2, h - 1), (0, h // 2), (w - 1, h // 2)
+        ]
+        for pt in sample_points:
+            px = crop_img.getpixel(pt)
+            diff = abs(px[0] - bg[0]) + abs(px[1] - bg[1]) + abs(px[2] - bg[2])
+            if diff <= tolerance * 3 and px[3] > 0:
+                ImageDraw.floodfill(crop_img, pt, transparent, thresh=tolerance)
+
+        return crop_img
+
     # ------------------------------------------------------------------ #
     # Standalone region detection for interactive editor
     # ------------------------------------------------------------------ #
+    def _detect_slide_elements_heuristic(
+        self,
+        image_path: str,
+        width: float,
+        height: float,
+        conversion_mode: str = "visual"
+    ) -> Dict[str, Any]:
+        """
+        High-speed computer vision visual component detector (offline fallback).
+        Uses connected-component clustering with whitespace gap analysis to detect
+        animatable picture layers without requiring external AI APIs.
+        """
+        try:
+            img = Image.open(image_path).convert("RGB")
+            bg = self._detect_dominant_border_color(img)
+            gw, gh = 128, 72  # 16:9 ratio, ultra-fast and accurate
+            small = img.resize((gw, gh), Image.Resampling.BILINEAR)
+
+            grid = []
+            for y in range(gh):
+                row = []
+                for x in range(gw):
+                    p = small.getpixel((x, y))
+                    diff = abs(p[0] - bg[0]) + abs(p[1] - bg[1]) + abs(p[2] - bg[2])
+                    row.append(1 if diff > 35 else 0)
+                grid.append(row)
+
+            # Single-pass 3x3 dilation to bridge word spacing
+            dilated = [[0] * gw for _ in range(gh)]
+            for y in range(gh):
+                for x in range(gw):
+                    if grid[y][x] == 1:
+                        for dy in (-1, 0, 1):
+                            for dx in (-1, 0, 1):
+                                ny, nx = y + dy, x + dx
+                                if 0 <= ny < gh and 0 <= nx < gw:
+                                    dilated[ny][nx] = 1
+
+            visited = [[False] * gw for _ in range(gh)]
+            raw_boxes = []
+
+            for y in range(gh):
+                for x in range(gw):
+                    if dilated[y][x] == 1 and not visited[y][x]:
+                        queue = deque([(y, x)])
+                        visited[y][x] = True
+                        min_y, max_y = y, y
+                        min_x, max_x = x, x
+                        count = 0
+                        while queue:
+                            cy, cx = queue.popleft()
+                            count += 1
+                            if cy < min_y: min_y = cy
+                            if cy > max_y: max_y = cy
+                            if cx < min_x: min_x = cx
+                            if cx > max_x: max_x = cx
+                            for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                                ny, nx = cy + dy, cx + dx
+                                if 0 <= ny < gh and 0 <= nx < gw and not visited[ny][nx] and dilated[ny][nx] == 1:
+                                    visited[ny][nx] = True
+                                    queue.append((ny, nx))
+
+                        if count >= 6:
+                            ymin = max(0, int((min_y / gh) * 1000) - 10)
+                            xmin = max(0, int((min_x / gw) * 1000) - 10)
+                            ymax = min(1000, int((max_y / gh) * 1000) + 10)
+                            xmax = min(1000, int((max_x / gw) * 1000) + 10)
+                            raw_boxes.append([ymin, xmin, ymax, xmax])
+
+            def merge_boxes(b_list, threshold=35):
+                changed = True
+                while changed:
+                    changed = False
+                    new_list = []
+                    skip = set()
+                    for i in range(len(b_list)):
+                        if i in skip:
+                            continue
+                        b1 = b_list[i]
+                        for j in range(i + 1, len(b_list)):
+                            if j in skip:
+                                continue
+                            b2 = b_list[j]
+                            if not (b1[2] + threshold < b2[0] or b1[0] - threshold > b2[2] or
+                                    b1[3] + threshold < b2[1] or b1[1] - threshold > b2[3]):
+                                b1 = [min(b1[0], b2[0]), min(b1[1], b2[1]), max(b1[2], b2[2]), max(b1[3], b2[3])]
+                                skip.add(j)
+                                changed = True
+                        new_list.append(b1)
+                    b_list = new_list
+                return b_list
+
+            merged = merge_boxes(raw_boxes, threshold=35)
+            merged.sort(key=lambda b: (b[0], b[1]))
+
+            elements = []
+            for idx, box in enumerate(merged):
+                ymin, xmin, ymax, xmax = box
+                if ymax <= 200:
+                    name = "Title" if idx == 0 else f"Header {idx + 1}"
+                else:
+                    name = f"Layer {idx + 1}"
+                elements.append({
+                    "name": name,
+                    "type": "graphic" if conversion_mode == "visual" else "card",
+                    "box_2d": box,
+                    "text_primary": False if conversion_mode == "visual" else True
+                })
+
+            bg_hex = f"#{bg[0]:02x}{bg[1]:02x}{bg[2]:02x}"
+            return {
+                "background_color": bg_hex,
+                "elements": elements,
+                "model": "heuristic-vision"
+            }
+        except Exception as e:
+            logger.warning(f"Heuristic detection failed: {e}")
+            return {
+                "background_color": "#ffffff",
+                "elements": [],
+                "model": "fallback"
+            }
+
     def detect_slide_elements(
         self,
         image_path: str,
         width: float,
-        height: float
+        height: float,
+        conversion_mode: str = "visual"
     ) -> Dict[str, Any]:
         """
-        Analyzes a single slide image and returns fine-grained visual regions
-        with normalized 0-1000 bounding boxes and 'text'/'graphic'/'table' classification.
-        Used by the frontend Interactive Region Inspector.
+        Analyzes a single slide image and returns visual regions:
+        - In 'visual' mode: clusters slide into 3-7 clean, animatable picture layers for PowerPoint animations.
+        - In 'editable' mode: returns fine-grained text, graphic, and table elements.
+        Used by the frontend Slide Region Inspector.
         """
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Slide image not found: {image_path}")
 
+        if not self.client:
+            return self._detect_slide_elements_heuristic(image_path, width, height, conversion_mode=conversion_mode)
+
         with open(image_path, "rb") as f:
             img_bytes = f.read()
+
+        if conversion_mode == "visual":
+            prompt = f"""You are an expert presentation visual decomposition engine for PowerPoint animation layers.
+Analyze this slide image (original dimensions: {width:.1f}x{height:.1f} points).
+Identify distinct, independent visual blocks that a presenter/teacher would want to animate sequentially (e.g. Title, Main Diagram / Equipment, Problem Question, Step 1, Step 2, Worked Example, Mascot / Kitten).
+
+Extract:
+1. "background_color": Dominant background hex (e.g. "#ffffff" or "#1e293b").
+2. "layers": List of distinct animatable visual components (aim for 3 to 7 clean, cohesive layers). For each:
+   - "name": Concise descriptive layer name for PowerPoint animation (e.g. "Title", "Balance Scale Diagram", "Problem Question", "Step 1 Calculation", "Step 2 Calculation", "Cat Mascot")
+   - "box_2d": [ymin, xmin, ymax, xmax] normalized 0-1000 tightly surrounding the entire visual unit with generous margins so nothing is clipped.
+Return strictly a valid JSON object:
+{{
+  "background_color": "#ffffff",
+  "layers": [
+    {{"name": "Title", "box_2d": [ymin, xmin, ymax, xmax]}}
+  ]
+}}
+"""
+            data, used_model = self._call_gemini_json(
+                [types.Part.from_bytes(data=img_bytes, mime_type="image/png"), prompt],
+                label="detect_visual_layers"
+            )
+            elements = []
+            layers_data = data.get("layers", [])
+            if not layers_data and data.get("elements"):
+                layers_data = data.get("elements")
+            elif not layers_data and data.get("graphic_elements"):
+                layers_data = data.get("graphic_elements") + data.get("text_elements", [])
+
+            for idx, lyr in enumerate(layers_data):
+                box = self._normalize_box_2d(lyr.get("box_2d"))
+                if not box:
+                    continue
+                name = lyr.get("name") or f"Layer {idx + 1}"
+                elements.append({
+                    "name": name,
+                    "type": "graphic",
+                    "box_2d": box,
+                    "text_primary": False
+                })
+
+            return {
+                "background_color": data.get("background_color", "#ffffff"),
+                "elements": elements,
+                "model": used_model
+            }
 
         prompt = f"""You are an expert presentation layout reconstruction engine.
 Analyze this slide image (original dimensions: {width:.1f}x{height:.1f} points).
@@ -338,6 +641,9 @@ Extract:
    CRITICAL NEGATIVE RULES FOR GRAPHICS:
    - Standalone graphics must be actual illustrations, characters, icons, or drawings. Do NOT extract rectangular card containers, border boxes, bounding frames, or background panels as graphic elements.
    - Do NOT duplicate elements: if a visual diagram has multiple connected components (e.g. a central beaker with arrows pointing to it), extract it as ONE unified diagram, NOT both the whole diagram and duplicate nested sub-parts.
+   - CRITICAL: NEVER include explanatory text paragraphs, definitions, or side notes inside a graphic_element bounding box! If a curved arrow or line points to a text block, terminate the graphic box at the tip of the arrow. The text must remain a separate text_element.
+   - CRITICAL: If a drawing has text inside it (such as a balance scale with weights labeled 'Magnesium' or molecules labeled 'H2O'), the graphic box MUST encompass the entire object and its labels completely with generous margins so nothing is cut off.
+   - CRITICAL: For bulleted text items (•, -, 1.), ALWAYS include the bullet glyph and leading margin in 'text_elements' box_2d.
 4. "tables": Tabular data grids (such as multi-row multi-column comparison tables, statistical tables). For each:
    - "name": Descriptive name
    - "box_2d": [ymin, xmin, ymax, xmax] normalized 0-1000 around the entire table grid including outer borders (excluding surrounding standalone illustrations outside the table)
@@ -419,18 +725,26 @@ Return strictly a valid JSON object.
             graphic_boxes.append(box)
             ymin, xmin, ymax, xmax = box
 
-            pad_x = max(8, int(img_w * 0.006))
-            pad_y = max(8, int(img_h * 0.006))
+            pad_x = max(16, int(img_w * 0.012))
+            pad_y = max(12, int(img_h * 0.010))
             cx0 = max(0, int((xmin / 1000.0) * img_w) - pad_x)
             cy0 = max(0, int((ymin / 1000.0) * img_h) - pad_y)
             cx1 = min(img_w, int((xmax / 1000.0) * img_w) + pad_x)
             cy1 = min(img_h, int((ymax / 1000.0) * img_h) + pad_y)
+
+            # Snap boundaries outward to whitespace so line art & enclosed text are never sliced
+            cx0, cy0, cx1, cy1 = self._snap_bbox_to_whitespace(
+                pil_img, cx0, cy0, cx1, cy1, page.background_color,
+                max_expand_x=int(img_w * 0.04), max_expand_y=int(img_h * 0.025)
+            )
 
             if (cx1 - cx0) < 10 or (cy1 - cy0) < 10:
                 continue
 
             try:
                 crop = pil_img.crop((cx0, cy0, cx1, cy1))
+                # Make exterior background transparent so large crops never block neighboring elements
+                crop = self._make_transparent_background(crop, page.background_color)
                 crop_path = temp_dir / f"p{page.page_num}_graphic_{g_idx}.png"
                 crop.save(str(crop_path), "PNG")
             except Exception as crop_err:
@@ -530,24 +844,31 @@ Return strictly a valid JSON object.
             if self._is_inside_table(box, table_boxes):
                 continue
 
-            # In visual mode, skip text elements whose center is already inside a cropped graphic element
-            if conversion_mode == "visual" and self._is_inside_table(box, graphic_boxes):
-                logger.info(f"[AIAnalyzer] Skipping text '{t.get('text', '')[:20]}' in visual mode - already rendered inside graphic image.")
-                continue
-
-            ymin, xmin, ymax, xmax = box
-
             raw_text_val = t.get("text", "").strip()
             if not raw_text_val:
                 continue
 
-            # Generous safety padding so letters, chemical symbols, and subscripts are NEVER clipped
-            pad_x = max(18, int(img_w * 0.012))
-            pad_y = max(8, int(img_h * 0.007))
+            # In visual mode, only skip minor diagram labels (<= 15 chars) whose center is completely inside a graphic.
+            # Never skip substantive text paragraphs, definitions, or bullet points!
+            if conversion_mode == "visual" and len(raw_text_val) <= 15 and self._is_inside_table(box, graphic_boxes):
+                logger.info(f"[AIAnalyzer] Skipping minor graphic label '{raw_text_val}' in visual mode - already rendered inside graphic.")
+                continue
+
+            ymin, xmin, ymax, xmax = box
+
+            # Generous safety padding so letters, chemical symbols, bullets, and subscripts are NEVER clipped
+            pad_x = max(24, int(img_w * 0.016))
+            pad_y = max(10, int(img_h * 0.008))
             cx0 = max(0, int((xmin / 1000.0) * img_w) - pad_x)
             cy0 = max(0, int((ymin / 1000.0) * img_h) - pad_y)
             cx1 = min(img_w, int((xmax / 1000.0) * img_w) + pad_x)
             cy1 = min(img_h, int((ymax / 1000.0) * img_h) + pad_y)
+
+            # Snap text boundary outward to whitespace so bullet characters and edge letters are completely included
+            cx0, cy0, cx1, cy1 = self._snap_bbox_to_whitespace(
+                pil_img, cx0, cy0, cx1, cy1, page.background_color,
+                max_expand_x=int(img_w * 0.035), max_expand_y=int(img_h * 0.02)
+            )
 
             # Map slide bbox to exact cropped image pixels
             pdf_x0 = (cx0 / img_w) * page.width
@@ -568,6 +889,7 @@ Return strictly a valid JSON object.
             if conversion_mode == "visual":
                 if (cx1 - cx0) >= 10 and (cy1 - cy0) >= 10:
                     crop = pil_img.crop((cx0, cy0, cx1, cy1))
+                    crop = self._make_transparent_background(crop, page.background_color)
                     crop_path = temp_dir / f"p{page.page_num}_textimg_{text_block_id}.png"
                     crop.save(str(crop_path), "PNG")
                     cropped_images.append(ExtractedImage(
@@ -677,8 +999,52 @@ Return strictly a valid JSON object.
             box = self._normalize_box_2d(el.get("box_2d"))
             if not box:
                 continue
-
             ymin, xmin, ymax, xmax = box
+
+            if conversion_mode == "visual":
+                pad_x = max(16, int(img_w * 0.012))
+                pad_y = max(12, int(img_h * 0.010))
+                cx0 = max(0, int((xmin / 1000.0) * img_w) - pad_x)
+                cy0 = max(0, int((ymin / 1000.0) * img_h) - pad_y)
+                cx1 = min(img_w, int((xmax / 1000.0) * img_w) + pad_x)
+                cy1 = min(img_h, int((ymax / 1000.0) * img_h) + pad_y)
+
+                # Snap boundaries outward to whitespace
+                cx0, cy0, cx1, cy1 = self._snap_bbox_to_whitespace(
+                    pil_img, cx0, cy0, cx1, cy1, page.background_color,
+                    max_expand_x=int(img_w * 0.04), max_expand_y=int(img_h * 0.025)
+                )
+
+                if (cx1 - cx0) < 10 or (cy1 - cy0) < 10:
+                    continue
+
+                pdf_x0 = (cx0 / img_w) * page.width
+                pdf_y0 = (cy0 / img_h) * page.height
+                pdf_x1 = (cx1 / img_w) * page.width
+                pdf_y1 = (cy1 / img_h) * page.height
+                elem_bbox = (pdf_x0, pdf_y0, pdf_x1, pdf_y1)
+
+                try:
+                    crop = pil_img.crop((cx0, cy0, cx1, cy1))
+                    crop = self._make_transparent_background(crop, page.background_color)
+                    crop_path = temp_dir / f"p{page.page_num}_custom_{idx}.png"
+                    crop.save(str(crop_path), "PNG")
+                except Exception as crop_err:
+                    logger.warning(f"[AIAnalyzer] Failed to crop custom visual element {idx}: {crop_err}")
+                    continue
+
+                elem_name = el.get("name") or f"Picture Layer {idx + 1}"
+                cropped_images.append(ExtractedImage(
+                    id=len(cropped_images),
+                    bbox=elem_bbox,
+                    width=cx1 - cx0,
+                    height=cy1 - cy0,
+                    format="png",
+                    temp_path=str(crop_path),
+                    name=elem_name,
+                    element_type="visual_region"
+                ))
+                continue
 
             cx0 = max(0, int((xmin / 1000.0) * img_w) - 3)
             cy0 = max(0, int((ymin / 1000.0) * img_h) - 3)
@@ -708,19 +1074,6 @@ Return strictly a valid JSON object.
                 crop.save(str(crop_path), "PNG")
             except Exception as crop_err:
                 logger.warning(f"[AIAnalyzer] Failed to crop custom element {idx}: {crop_err}")
-                continue
-
-            if conversion_mode == "visual":
-                cropped_images.append(ExtractedImage(
-                    id=len(cropped_images),
-                    bbox=elem_bbox,
-                    width=cx1 - cx0,
-                    height=cy1 - cy0,
-                    format="png",
-                    temp_path=str(crop_path),
-                    name=elem_name,
-                    element_type="visual_region"
-                ))
                 continue
 
             # In editable mode: check if this element is a table

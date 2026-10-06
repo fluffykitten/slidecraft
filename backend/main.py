@@ -178,6 +178,7 @@ async def detect_slide_regions(
     page_num: int = Form(1),
     detect_ai: bool = Form(True),
     ai_model: str = Form("gemini-3.5-flash-lite"),
+    conversion_mode: str = Form("visual"),
     gemini_api_key: Optional[str] = Form(None)
 ):
     """
@@ -215,14 +216,13 @@ async def detect_slide_regions(
         if detect_ai:
             system_key = os.getenv("GEMINI_API_KEY", "").strip() or GEMINI_API_KEY
             analyzer = AIAnalyzer(api_key=gemini_api_key or system_key, model_name=ai_model)
-            if analyzer.client:
-                try:
-                    detection = analyzer.detect_slide_elements(str(temp_img), width_pt, height_pt)
-                    elements = detection.get("elements", [])
-                    bg_color = detection.get("background_color", "#ffffff")
-                    used_model = detection.get("model", ai_model)
-                except Exception as det_err:
-                    logger.warning(f"Detection failed: {det_err}")
+            try:
+                detection = analyzer.detect_slide_elements(str(temp_img), width_pt, height_pt, conversion_mode=conversion_mode)
+                elements = detection.get("elements", [])
+                bg_color = detection.get("background_color", "#ffffff")
+                used_model = detection.get("model", ai_model)
+            except Exception as det_err:
+                logger.warning(f"Detection failed: {det_err}")
 
         return {
             "page_num": page_num,

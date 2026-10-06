@@ -12,6 +12,7 @@ class RegionEditor {
     this.closeBtn = document.getElementById('closeRegionEditorBtn');
     this.autoDetectBtn = document.getElementById('editorAutoDetectBtn');
     this.autoDetectText = document.getElementById('editorAutoDetectText');
+    this.addLayerBtn = document.getElementById('editorAddLayerBtn');
     this.addTextBtn = document.getElementById('editorAddTextBtn');
     this.addPicBtn = document.getElementById('editorAddPicBtn');
     this.addTableBtn = document.getElementById('editorAddTableBtn');
@@ -26,10 +27,11 @@ class RegionEditor {
 
     this.currentFile = null;
     this.currentPageNum = 1;
+    this.conversionMode = 'visual';
     this.onSaveCallback = null;
     this.regions = []; // [{ id, name, type: "text"|"graphic"|"table", box_2d: [ymin, xmin, ymax, xmax], rows?: [] }]
     this.selectedRegionId = null;
-    this.drawMode = 'text'; // 'text' | 'graphic' | 'table'
+    this.drawMode = 'graphic'; // 'text' | 'graphic' | 'table'
 
     this.dragState = null; // { type: 'move'|'resize'|'draw', ... }
 
@@ -43,6 +45,14 @@ class RegionEditor {
     });
 
     this.autoDetectBtn.addEventListener('click', () => this.runAutoDetect());
+
+    if (this.addLayerBtn) {
+      this.addLayerBtn.addEventListener('click', () => {
+        this.drawMode = 'graphic';
+        this.highlightDrawMode();
+        if (window.showToast) window.showToast('Click & drag on the slide to draw an Animatable Picture Layer', 'info');
+      });
+    }
 
     this.addTextBtn.addEventListener('click', () => {
       this.drawMode = 'text';
@@ -76,7 +86,8 @@ class RegionEditor {
       }
       this.hide();
       if (window.showToast) {
-        window.showToast(`Saved ${this.regions.length} custom regions for Slide ${this.currentPageNum}!`, 'success');
+        const label = this.conversionMode === 'visual' ? 'picture layers' : 'custom regions';
+        window.showToast(`Saved ${this.regions.length} ${label} for Slide ${this.currentPageNum}!`, 'success');
       }
     });
 
@@ -97,10 +108,15 @@ class RegionEditor {
   }
 
   highlightDrawMode() {
+    const isVisual = this.conversionMode === 'visual';
+    if (this.addLayerBtn) {
+      this.addLayerBtn.style.background = isVisual && this.drawMode === 'graphic' ? 'rgba(16, 185, 129, 0.25)' : 'transparent';
+      this.addLayerBtn.style.borderColor = isVisual && this.drawMode === 'graphic' ? '#10b981' : 'var(--border-medium)';
+    }
     this.addTextBtn.style.background = this.drawMode === 'text' ? 'var(--accent-blue-subtle)' : 'transparent';
     this.addTextBtn.style.borderColor = this.drawMode === 'text' ? 'var(--accent-blue)' : 'var(--border-medium)';
-    this.addPicBtn.style.background = this.drawMode === 'graphic' ? 'var(--accent-emerald-subtle)' : 'transparent';
-    this.addPicBtn.style.borderColor = this.drawMode === 'graphic' ? 'var(--accent-emerald)' : 'var(--border-medium)';
+    this.addPicBtn.style.background = !isVisual && this.drawMode === 'graphic' ? 'var(--accent-emerald-subtle)' : 'transparent';
+    this.addPicBtn.style.borderColor = !isVisual && this.drawMode === 'graphic' ? 'var(--accent-emerald)' : 'var(--border-medium)';
     if (this.addTableBtn) {
       this.addTableBtn.style.background = this.drawMode === 'table' ? 'rgba(139, 92, 246, 0.15)' : 'transparent';
       this.addTableBtn.style.borderColor = this.drawMode === 'table' ? '#8b5cf6' : 'var(--border-medium)';
@@ -115,14 +131,31 @@ class RegionEditor {
     this.modal.style.display = 'none';
   }
 
-  open(file, pageNum, existingRegions = null, initialImageSrc = null, onSave = null) {
+  open(file, pageNum, existingRegions = null, initialImageSrc = null, onSave = null, conversionMode = 'visual') {
     this.currentFile = file;
     this.currentPageNum = pageNum;
     this.onSaveCallback = onSave;
+    this.conversionMode = conversionMode || (document.getElementById('conversionModeSelect')?.value || 'visual');
     this.selectedRegionId = null;
 
     this.pageBadge.textContent = `Slide ${pageNum}`;
     this.regions = [];
+
+    const isVisual = this.conversionMode === 'visual';
+    const titleSpan = this.title.querySelector('span:first-child');
+    if (titleSpan) {
+      titleSpan.textContent = isVisual ? 'Visual Layer & Animation Inspector' : 'Slide Region Inspector';
+    }
+    if (this.subtitle) {
+      this.subtitle.textContent = isVisual
+        ? 'Customize picture layers for PowerPoint animations. Drag handles to resize, or click badge to rename.'
+        : 'Click badge to toggle Text / Graphic. Drag handles to resize. Drag canvas to draw new region.';
+    }
+    if (this.addLayerBtn) this.addLayerBtn.style.display = isVisual ? 'inline-flex' : 'none';
+    if (this.addTextBtn) this.addTextBtn.style.display = isVisual ? 'none' : 'inline-flex';
+    if (this.addPicBtn) this.addPicBtn.style.display = isVisual ? 'none' : 'inline-flex';
+    if (this.addTableBtn) this.addTableBtn.style.display = isVisual ? 'none' : 'inline-flex';
+    this.drawMode = isVisual ? 'graphic' : 'text';
 
     if (initialImageSrc) {
       this.img.src = initialImageSrc;
@@ -151,6 +184,7 @@ class RegionEditor {
     formData.append('file', this.currentFile);
     formData.append('page_num', this.currentPageNum);
     formData.append('detect_ai', 'true');
+    formData.append('conversion_mode', this.conversionMode || 'visual');
 
     // Retrieve active AI model from localStorage or settings
     const activeModel = localStorage.getItem('slidecraft_ai_model') || 'gemini-3.5-flash-lite';
@@ -172,16 +206,19 @@ class RegionEditor {
 
       // Convert detected elements into local region objects
       const detectedElements = data.elements || [];
+      const isVisual = this.conversionMode === 'visual';
       this.regions = detectedElements.map((el, i) => {
         let elType = 'graphic';
-        if (el.type === 'table') {
-          elType = 'table';
-        } else if (el.type === 'text' || el.text_primary) {
-          elType = 'text';
+        if (!isVisual) {
+          if (el.type === 'table') {
+            elType = 'table';
+          } else if (el.type === 'text' || el.text_primary) {
+            elType = 'text';
+          }
         }
         return {
           id: `reg_${Date.now()}_${i}`,
-          name: el.name || `Element ${i + 1}`,
+          name: el.name || (isVisual ? `Layer ${i + 1}` : `Element ${i + 1}`),
           type: elType,
           box_2d: el.box_2d || [0, 0, 1000, 1000],
           rows: el.rows || []
@@ -190,7 +227,8 @@ class RegionEditor {
 
       this.renderRegions();
       if (window.showToast) {
-        window.showToast(`Auto-detected ${this.regions.length} visual elements`, 'success');
+        const desc = isVisual ? `${this.regions.length} animation picture layers` : `${this.regions.length} visual elements`;
+        window.showToast(`Auto-detected ${desc}`, 'success');
       }
     } catch (err) {
       console.warn('Auto-detect error:', err);
@@ -207,8 +245,9 @@ class RegionEditor {
     let textCount = 0;
     let graphicCount = 0;
     let tableCount = 0;
+    const isVisual = this.conversionMode === 'visual';
 
-    this.regions.forEach((reg) => {
+    this.regions.forEach((reg, idx) => {
       if (reg.type === 'text') textCount++;
       else if (reg.type === 'table') tableCount++;
       else graphicCount++;
@@ -220,31 +259,52 @@ class RegionEditor {
       const heightPct = Math.max(1, ((ymax - ymin) / 1000) * 100);
 
       const box = document.createElement('div');
-      box.className = `region-box type-${reg.type} ${reg.id === this.selectedRegionId ? 'selected' : ''}`;
+      const boxType = isVisual ? 'graphic' : reg.type;
+      box.className = `region-box type-${boxType} ${reg.id === this.selectedRegionId ? 'selected' : ''}`;
       box.dataset.id = reg.id;
       box.style.top = `${topPct}%`;
       box.style.left = `${leftPct}%`;
       box.style.width = `${widthPct}%`;
       box.style.height = `${heightPct}%`;
 
-      // Type Badge Pill (Click to cycle between Text, Graphic, and Table)
+      // Type Badge Pill
       const badge = document.createElement('div');
       badge.className = 'region-badge';
-      const labelText = reg.type === 'text' ? 'TEXT' : (reg.type === 'table' ? 'TABLE' : 'GRAPHIC');
-      badge.innerHTML = `<span>${labelText}</span>`;
-      badge.title = 'Click to cycle: Text Box → Graphic Shape → Data Table';
-      badge.addEventListener('mousedown', (e) => e.stopPropagation());
-      badge.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.toggleRegionType(reg.id);
-      });
+
+      if (isVisual) {
+        badge.style.background = '#10b981';
+        badge.style.color = '#ffffff';
+        badge.style.fontWeight = '600';
+        badge.style.cursor = 'pointer';
+        badge.innerHTML = `<span>🏷️ ${reg.name || ('Layer ' + (idx + 1))} ✏️</span>`;
+        badge.title = 'Click to rename this picture layer (matches PowerPoint Animation & Selection Pane name)';
+        badge.addEventListener('mousedown', (e) => e.stopPropagation());
+        badge.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const currentTitle = reg.name || `Layer ${idx + 1}`;
+          const newName = prompt('Enter layer name for PowerPoint animation sequence (e.g. 1_Judul, 2_Diagram, 3_Langkah_1):', currentTitle);
+          if (newName !== null && newName.trim()) {
+            reg.name = newName.trim();
+            this.renderRegions();
+          }
+        });
+      } else {
+        const labelText = reg.type === 'text' ? 'TEXT' : (reg.type === 'table' ? 'TABLE' : 'GRAPHIC');
+        badge.innerHTML = `<span>${labelText}</span>`;
+        badge.title = 'Click to cycle: Text Box → Graphic Shape → Data Table';
+        badge.addEventListener('mousedown', (e) => e.stopPropagation());
+        badge.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.toggleRegionType(reg.id);
+        });
+      }
       box.appendChild(badge);
 
       // Delete Button (x)
       const delBtn = document.createElement('div');
       delBtn.className = 'region-del-btn';
       delBtn.innerHTML = '✕';
-      delBtn.title = 'Delete element';
+      delBtn.title = 'Delete layer';
       delBtn.addEventListener('mousedown', (e) => e.stopPropagation());
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -264,10 +324,26 @@ class RegionEditor {
       this.overlay.appendChild(box);
     });
 
-    this.countText.textContent = `${textCount} Text Boxes`;
-    this.countGraphic.textContent = `${graphicCount} Graphic Shapes`;
-    if (this.countTable) {
-      this.countTable.textContent = `${tableCount} Tables`;
+    if (isVisual) {
+      if (this.countText) this.countText.style.display = 'none';
+      if (this.countTable) this.countTable.style.display = 'none';
+      if (this.countGraphic) {
+        this.countGraphic.style.display = 'inline-flex';
+        this.countGraphic.textContent = `${this.regions.length} Animatable Picture Layers`;
+      }
+    } else {
+      if (this.countText) {
+        this.countText.style.display = 'inline-flex';
+        this.countText.textContent = `${textCount} Text Boxes`;
+      }
+      if (this.countGraphic) {
+        this.countGraphic.style.display = 'inline-flex';
+        this.countGraphic.textContent = `${graphicCount} Graphic Shapes`;
+      }
+      if (this.countTable) {
+        this.countTable.style.display = 'inline-flex';
+        this.countTable.textContent = `${tableCount} Tables`;
+      }
     }
   }
 
@@ -482,11 +558,13 @@ class RegionEditor {
 
       // Only add if box has a minimum size (at least 15x15 normalized points)
       if ((xMaxNorm - xMinNorm) > 15 && (yMaxNorm - yMinNorm) > 15) {
+        const isVisual = this.conversionMode === 'visual';
         const defaultNames = { text: 'Text Box', graphic: 'Picture Shape', table: 'Data Table' };
+        const layerNum = this.regions.length + 1;
         const newReg = {
           id: `reg_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-          name: defaultNames[this.drawMode] || 'Element',
-          type: this.drawMode,
+          name: isVisual ? `Layer ${layerNum}` : (defaultNames[this.drawMode] || 'Element'),
+          type: isVisual ? 'graphic' : this.drawMode,
           box_2d: [
             Math.round(yMinNorm),
             Math.round(xMinNorm),
