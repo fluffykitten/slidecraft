@@ -1,0 +1,3 @@
+# Cloudflare Pages Redirects & Reverse Proxy
+# If you prefer 200 proxying without Functions, uncomment and edit the line below:
+# /api/* https://your-backend-app.onrender.com/api/:splat 200

@@ -42,10 +42,13 @@ class ExtractedImage(BaseModel):
 
 
 class ExtractedShape(BaseModel):
-    type: str = "rect"  # rect, line
+    type: str = "rect"  # rect, rounded_rect, line
     bbox: Tuple[float, float, float, float]
     fill_color: Optional[Tuple[int, int, int]] = None
     stroke_color: Optional[Tuple[int, int, int]] = None
+    stroke_width_pt: float = 1.5
+    is_rounded: bool = False
+    name: Optional[str] = None
 
 class ExtractedTable(BaseModel):
     id: int
@@ -56,6 +59,8 @@ class ExtractedTable(BaseModel):
     header_text_rgb: Optional[Tuple[int, int, int]] = None
     col_alignments: Optional[List[str]] = None
     alternate_bg_rgb: Optional[Tuple[int, int, int]] = None
+    border_rgb: Optional[Tuple[int, int, int]] = (148, 163, 184)
+    border_width_pt: float = 1.0
 
 class ExtractedPage(BaseModel):
     page_num: int  # 1-indexed

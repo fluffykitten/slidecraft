@@ -207,7 +207,8 @@ class ConversionManager:
                 if options.custom_regions:
                     custom_page_regions = options.custom_regions.get(p_num) or options.custom_regions.get(str(p_num))
 
-                analyzed_page = analyzer.analyze_page(
+                analyzed_page = await asyncio.to_thread(
+                    analyzer.analyze_page,
                     page_data,
                     ai_enabled=options.ai_enabled,
                     conversion_mode=options.conversion_mode,

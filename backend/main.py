@@ -44,6 +44,13 @@ conversion_mgr = ConversionManager()
 class GeminiTestRequest(BaseModel):
     api_key: str
 
+@app.get("/api/health")
+async def health_check():
+    """
+    Health check endpoint for connection tests and deployment monitoring.
+    """
+    return {"status": "ok", "app": "SlideCraft", "version": "1.0.0"}
+
 @app.get("/api/config")
 async def get_config():
     """

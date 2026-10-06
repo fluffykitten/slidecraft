@@ -56,7 +56,17 @@ FONT_FAMILY_MAPPING = {
     # Display & Heavy
     "impact": "Impact",
     "trebuchet ms": "Trebuchet MS",
-    "comic sans ms": "Comic Sans MS",
+    # Comic / Casual / Handwritten
+    "comic neue": "Comic Neue",
+    "comic sans ms": "Comic Neue",
+    "comic sans": "Comic Neue",
+    "comic": "Comic Neue",
+    "chalkboard": "Comic Neue",
+    "chalkboard se": "Comic Neue",
+    "casual": "Comic Neue",
+    "handwriting": "Comic Neue",
+    "handwritten": "Comic Neue",
+    "marker": "Comic Neue",
 }
 
 def calculate_optimal_font_size(
@@ -228,17 +238,35 @@ class PPTXBuilder:
                 alt_bg = tbl.alternate_bg_rgb
                 col_aligns = tbl.col_alignments or []
 
+                border_color = tbl.border_rgb or (148, 163, 184)
+                border_hex = f"{border_color[0]:02X}{border_color[1]:02X}{border_color[2]:02X}"
+                border_w = int((tbl.border_width_pt or 1.0) * 12700)
+
                 for r_idx, row in enumerate(tbl.rows):
                     is_header = (r_idx == 0 and tbl.header_row)
                     for c_idx, cell_value in enumerate(row):
                         if c_idx < num_cols:
                             cell = table.cell(r_idx, c_idx)
                             cell.text = str(cell_value).strip()
-                            cell.margin_left = Pt(5)
-                            cell.margin_right = Pt(5)
-                            cell.margin_top = Pt(3)
-                            cell.margin_bottom = Pt(3)
+                            cell.margin_left = Pt(6)
+                            cell.margin_right = Pt(6)
+                            cell.margin_top = Pt(4)
+                            cell.margin_bottom = Pt(4)
 
+                            # 1. Apply visible DrawingML cell borders on all 4 sides (must precede fill in DrawingML schema)
+                            try:
+                                tcPr = cell._tc.get_or_add_tcPr()
+                                for b in ['lnL', 'lnR', 'lnT', 'lnB']:
+                                    border_xml = parse_xml(
+                                        f'<a:{b} xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" w="{border_w}">'
+                                        f'<a:solidFill><a:srgbClr val="{border_hex}"/></a:solidFill>'
+                                        f'</a:{b}>'
+                                    )
+                                    tcPr.append(border_xml)
+                            except Exception as border_err:
+                                pass
+
+                            # 2. Fill styling
                             cell.fill.solid()
                             if is_header:
                                 cell.fill.fore_color.rgb = RGBColor(*header_bg)
@@ -258,10 +286,14 @@ class PPTXBuilder:
                             elif is_header or c_idx > 0:
                                 align = PP_ALIGN.CENTER
 
+                            table_font = (
+                                self.body_font if (self.body_font and self.body_font.lower() != "auto")
+                                else (self.heading_font if (self.heading_font and self.heading_font.lower() != "auto") else "Segoe UI")
+                            )
                             for p in cell.text_frame.paragraphs:
                                 p.alignment = align
                                 for r in p.runs:
-                                    r.font.name = "Segoe UI"
+                                    r.font.name = table_font
                                     r.font.size = Pt(11 if is_header else 10)
                                     r.font.bold = is_header
                                     if is_header:
@@ -273,16 +305,34 @@ class PPTXBuilder:
 
     def _add_shapes(self, slide, page: ExtractedPage, mapper: CoordinateMapper):
         """
-        Adds vector card backgrounds and banner shapes.
+        Adds vector card backgrounds, callout frames, and border shapes.
         """
         for shape in page.shapes:
-            if shape.type == "rect" and shape.fill_color:
+            try:
                 left, top, width, height = mapper.map_bbox(shape.bbox, width_buffer_pct=0.0)
-                rect_shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, width, height)
-                rect_shape.fill.solid()
-                r, g, b = shape.fill_color
-                rect_shape.fill.fore_color.rgb = RGBColor(r, g, b)
-                rect_shape.line.color.rgb = RGBColor(r, g, b)
+                shape_type = MSO_SHAPE.ROUNDED_RECTANGLE if shape.is_rounded else MSO_SHAPE.RECTANGLE
+                rect_shape = slide.shapes.add_shape(shape_type, left, top, width, height)
+
+                # Fill styling
+                if shape.fill_color:
+                    rect_shape.fill.solid()
+                    rect_shape.fill.fore_color.rgb = RGBColor(*shape.fill_color)
+                else:
+                    rect_shape.fill.background()
+
+                # Stroke / Border styling
+                if shape.stroke_color:
+                    rect_shape.line.color.rgb = RGBColor(*shape.stroke_color)
+                    rect_shape.line.width = Pt(shape.stroke_width_pt or 1.5)
+                elif shape.fill_color:
+                    rect_shape.line.color.rgb = RGBColor(*shape.fill_color)
+                else:
+                    rect_shape.line.fill.background()
+
+                if shape.name:
+                    rect_shape.name = shape.name
+            except Exception as e:
+                print(f"[PPTXBuilder] Warning: failed to add shape: {e}")
 
     def _add_images(self, slide, page: ExtractedPage, mapper: CoordinateMapper):
         """
@@ -480,6 +530,15 @@ class PPTXBuilder:
                 return FONT_FAMILY_MAPPING[clean]
             return span_font.strip()
 
-        # 3. Default fallback based on role
+        # 3. Default fallback based on role (or if one font was explicitly configured)
+        if is_heading and self.heading_font and self.heading_font.lower() != "auto":
+            return self.heading_font
+        if not is_heading and self.body_font and self.body_font.lower() != "auto":
+            return self.body_font
+        if self.body_font and self.body_font.lower() != "auto":
+            return self.body_font
+        if self.heading_font and self.heading_font.lower() != "auto":
+            return self.heading_font
+
         return "Century Gothic" if is_heading else "Segoe UI"
 

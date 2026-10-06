@@ -162,24 +162,10 @@ class RegionEditor {
     }
 
     try {
-      const res = await fetch('/api/detect-slide-regions', {
+      const { data } = await window.safeFetch('/api/detect-slide-regions', {
         method: 'POST',
         body: formData
       });
-
-      if (!res.ok) {
-        let errMsg = 'Auto-detection failed';
-        try {
-          const err = await res.json();
-          errMsg = err.detail || errMsg;
-        } catch (_) {
-          const text = await res.text();
-          errMsg = text || `Server error (${res.status})`;
-        }
-        throw new Error(errMsg);
-      }
-
-      const data = await res.json();
       if (data.image_base64) {
         this.img.src = data.image_base64;
       }

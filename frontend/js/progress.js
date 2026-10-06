@@ -72,7 +72,7 @@ class ProgressTracker {
       this.eventSource.close();
     }
 
-    const streamUrl = `/api/tasks/${taskId}/stream`;
+    const streamUrl = window.getApiUrl ? window.getApiUrl(`/api/tasks/${taskId}/stream`) : `/api/tasks/${taskId}/stream`;
     this.eventSource = new EventSource(streamUrl);
 
     this.eventSource.addEventListener('progress', (e) => {
@@ -117,9 +117,8 @@ class ProgressTracker {
 
   async pollTaskStatus(taskId) {
     try {
-      const res = await fetch(`/api/tasks/${taskId}/status`);
-      if (res.ok) {
-        const data = await res.json();
+      const { data } = await window.safeFetch(`/api/tasks/${taskId}/status`);
+      if (data) {
         this.renderState(data);
         if (data.status === 'completed') {
           this.onComplete(data);
@@ -131,7 +130,7 @@ class ProgressTracker {
         }
       }
     } catch (e) {
-      console.error('Polling error:', e);
+      console.error('Polling error:', e.message);
     }
   }
 }

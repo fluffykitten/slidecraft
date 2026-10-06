@@ -35,7 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const convertBtn = document.getElementById('convertBtn');
   const convertBtnText = document.getElementById('convertBtnText');
   const conversionModeSelect = document.getElementById('conversionModeSelect');
-  const conversionModeHint = document.getElementById('conversionModeHint');
   const headingFontSelect = document.getElementById('headingFontSelect');
   const bodyFontSelect = document.getElementById('bodyFontSelect');
   const ratioSelect = document.getElementById('ratioSelect');
@@ -45,35 +44,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultsList = document.getElementById('resultsList');
   const convertAnotherBtn = document.getElementById('convertAnotherBtn');
 
-  if (conversionModeSelect) {
-    const updateModeHint = () => {
-      if (!conversionModeHint) return;
-      if (conversionModeSelect.value === 'editable') {
-        conversionModeHint.textContent = 'Text elements become native editable text boxes with original typography and colors. Graphic elements stay sharp picture shapes.';
-      } else {
-        conversionModeHint.textContent = 'Each slide element becomes an independent picture shape. Zero OCR errors, pixel-perfect layout.';
-      }
-    };
-    conversionModeSelect.addEventListener('change', updateModeHint);
-    updateModeHint();
-  }
-
   // AI & Settings elements
   const aiStatusPill = document.getElementById('aiStatusPill');
   const aiStatusText = document.getElementById('aiStatusText');
   const openSettingsBtn = document.getElementById('openSettingsBtn');
   const closeSettingsBtn = document.getElementById('closeSettingsBtn');
   const settingsModal = document.getElementById('settingsModal');
+  const backendUrlInput = document.getElementById('backendUrlInput');
+  const testBackendBtn = document.getElementById('testBackendBtn');
+  const backendTestStatus = document.getElementById('backendTestStatus');
   const geminiApiKeyInput = document.getElementById('geminiApiKeyInput');
   const testApiKeyBtn = document.getElementById('testApiKeyBtn');
   const apiKeyTestStatus = document.getElementById('apiKeyTestStatus');
   const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+  const backendNoticeBanner = document.getElementById('backendNoticeBanner');
+  const openSettingsFromBannerBtn = document.getElementById('openSettingsFromBannerBtn');
+
+  if (openSettingsFromBannerBtn) {
+    openSettingsFromBannerBtn.addEventListener('click', () => {
+      openSettingsBtn.click();
+    });
+  }
 
   // State
   let selectedFiles = [];
   let serverHasGeminiKey = false;
   let customGeminiKey = localStorage.getItem('slidecraft_gemini_key') || '';
-  let selectedModel = localStorage.getItem('slidecraft_ai_model') || 'gemini-3.6-flash';
+  let selectedModel = localStorage.getItem('slidecraft_ai_model') || 'gemini-3.5-flash-lite';
 
   // Model Select Elements
   const modelSelect = document.getElementById('modelSelect');
@@ -90,14 +87,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Fetch available AI models from backend
   async function fetchAvailableModels() {
     try {
-      const res = await fetch('/api/models');
-      if (res.ok) {
-        const data = await res.json();
+      const { data } = await window.safeFetch('/api/models');
+      if (data) {
         const models = data.models || [];
         populateModelDropdowns(models, data.default_model);
       }
     } catch (e) {
-      console.warn('Models fetch error:', e);
+      console.warn('Models fetch error:', e.message);
     }
   }
 
@@ -145,14 +141,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check server configuration
   async function fetchServerConfig() {
     try {
-      const res = await fetch('/api/config');
-      if (res.ok) {
-        const config = await res.json();
+      const { data: config } = await window.safeFetch('/api/config');
+      if (config) {
         serverHasGeminiKey = config.has_gemini_key;
         updateAIStatusUI();
+        if (backendNoticeBanner) backendNoticeBanner.style.display = 'none';
       }
     } catch (e) {
-      console.warn('Config fetch error:', e);
+      console.warn('Config fetch error:', e.message);
+      if (backendNoticeBanner && (window.isStaticHosted() || !window.getApiBaseUrl())) {
+        backendNoticeBanner.style.display = 'flex';
+      }
     }
   }
 
@@ -176,18 +175,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const activeModelName = getModelDisplayName(selectedModel);
 
     if (!aiToggle.checked) {
-      aiStatusPill.className = 'ai-pill inactive';
-      aiStatusText.textContent = 'AI Disabled (Rule-based)';
+      if (aiStatusPill && aiStatusText) {
+        aiStatusPill.className = 'ai-pill inactive';
+        aiStatusText.textContent = 'AI Disabled (Rule-based)';
+      }
       if (modelSelect) modelSelect.disabled = true;
       if (modelSelectGroup) modelSelectGroup.style.opacity = '0.5';
     } else if (hasKey) {
-      aiStatusPill.className = 'ai-pill';
-      aiStatusText.textContent = `${activeModelName} Active`;
+      if (aiStatusPill && aiStatusText) {
+        aiStatusPill.className = 'ai-pill';
+        aiStatusText.textContent = `${activeModelName} Active`;
+      }
       if (modelSelect) modelSelect.disabled = false;
       if (modelSelectGroup) modelSelectGroup.style.opacity = '1';
     } else {
-      aiStatusPill.className = 'ai-pill inactive';
-      aiStatusText.textContent = 'Smart Algorithmic Mode';
+      if (aiStatusPill && aiStatusText) {
+        aiStatusPill.className = 'ai-pill inactive';
+        aiStatusText.textContent = 'Smart Algorithmic Mode';
+      }
       if (modelSelect) modelSelect.disabled = false;
       if (modelSelectGroup) modelSelectGroup.style.opacity = '1';
     }
@@ -197,8 +202,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Settings Modal Handlers
   openSettingsBtn.addEventListener('click', () => {
+    if (backendUrlInput) backendUrlInput.value = window.getApiBaseUrl();
     geminiApiKeyInput.value = customGeminiKey;
     if (settingsModelSelect) settingsModelSelect.value = selectedModel;
+    if (backendTestStatus) backendTestStatus.textContent = '';
     apiKeyTestStatus.textContent = '';
     settingsModal.style.display = 'flex';
   });
@@ -210,6 +217,37 @@ document.addEventListener('DOMContentLoaded', () => {
   settingsModal.addEventListener('click', (e) => {
     if (e.target === settingsModal) settingsModal.style.display = 'none';
   });
+
+  if (testBackendBtn) {
+    testBackendBtn.addEventListener('click', async () => {
+      const candidateUrl = (backendUrlInput.value || '').trim().replace(/\/+$/, '');
+      const testEndpoint = candidateUrl ? `${candidateUrl}/api/config` : '/api/config';
+
+      backendTestStatus.style.color = 'var(--text-secondary)';
+      backendTestStatus.textContent = 'Testing backend connection...';
+
+      try {
+        const res = await fetch(testEndpoint);
+        const text = await res.text();
+        let json = null;
+        try { json = JSON.parse(text); } catch (_) {}
+
+        if (res.ok && json) {
+          backendTestStatus.style.color = 'var(--accent-emerald)';
+          backendTestStatus.textContent = '✓ Connected to backend successfully!';
+        } else if (res.status === 404) {
+          backendTestStatus.style.color = 'var(--accent-rose)';
+          backendTestStatus.textContent = '✗ 404 Not Found: Check backend URL path.';
+        } else {
+          backendTestStatus.style.color = 'var(--accent-rose)';
+          backendTestStatus.textContent = `✗ Server responded with HTTP ${res.status}`;
+        }
+      } catch (err) {
+        backendTestStatus.style.color = 'var(--accent-rose)';
+        backendTestStatus.textContent = '✗ Connection failed: ' + err.message;
+      }
+    });
+  }
 
   testApiKeyBtn.addEventListener('click', async () => {
     const key = geminiApiKeyInput.value.trim();
@@ -223,26 +261,31 @@ document.addEventListener('DOMContentLoaded', () => {
     apiKeyTestStatus.textContent = 'Testing connection...';
 
     try {
-      const res = await fetch('/api/test-gemini', {
+      const { data: result } = await window.safeFetch('/api/test-gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: key })
       });
-      const result = await res.json();
-      if (result.valid) {
+
+      if (result && result.valid) {
         apiKeyTestStatus.style.color = 'var(--accent-emerald)';
         apiKeyTestStatus.textContent = '✓ Verified! Key is valid.';
       } else {
         apiKeyTestStatus.style.color = 'var(--accent-rose)';
-        apiKeyTestStatus.textContent = '✗ ' + result.message;
+        apiKeyTestStatus.textContent = '✗ ' + ((result && result.message) || 'Verification failed');
       }
     } catch (err) {
       apiKeyTestStatus.style.color = 'var(--accent-rose)';
-      apiKeyTestStatus.textContent = '✗ Network test error: ' + err.message;
+      apiKeyTestStatus.textContent = '✗ ' + err.message;
     }
   });
 
   saveSettingsBtn.addEventListener('click', () => {
+    if (backendUrlInput) {
+      const newBackendUrl = backendUrlInput.value.trim();
+      window.setApiBaseUrl(newBackendUrl);
+    }
+
     customGeminiKey = geminiApiKeyInput.value.trim();
     if (settingsModelSelect) {
       selectedModel = settingsModelSelect.value;
@@ -251,12 +294,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (customGeminiKey) {
       localStorage.setItem('slidecraft_gemini_key', customGeminiKey);
-      window.showToast('Gemini API key and model saved!', 'success');
+      window.showToast('Settings saved! Custom Gemini key active.', 'success');
     } else {
       localStorage.removeItem('slidecraft_gemini_key');
-      window.showToast('Settings saved! Using system API key.', 'info');
+      window.showToast('Settings saved!', 'info');
     }
     settingsModal.style.display = 'none';
+    fetchServerConfig();
+    fetchAvailableModels();
     updateAIStatusUI();
   });
 
@@ -400,9 +445,11 @@ document.addEventListener('DOMContentLoaded', () => {
       formData.append('files', file);
     });
 
-    const rangeVal = pageRangeInput.value.trim();
-    if (rangeVal && rangeVal.toLowerCase() !== 'all') {
-      formData.append('page_range', rangeVal);
+    if (pageRangeInput) {
+      const rangeVal = pageRangeInput.value.trim();
+      if (rangeVal && rangeVal.toLowerCase() !== 'all') {
+        formData.append('page_range', rangeVal);
+      }
     }
     formData.append('slide_ratio', ratioSelect.value);
     formData.append('conversion_mode', conversionModeSelect ? conversionModeSelect.value : 'visual');
@@ -421,26 +468,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
-      const response = await fetch('/api/convert', {
+      const { data: resData } = await window.safeFetch('/api/convert', {
         method: 'POST',
         body: formData
       });
 
-      if (!response.ok) {
-        let errMsg = 'Conversion start failed';
-        try {
-          const errorData = await response.json();
-          errMsg = errorData.detail || errMsg;
-        } catch (_) {
-          const text = await response.text();
-          errMsg = text || `Server error (${response.status})`;
-        }
-        throw new Error(errMsg);
-      }
-
-      const resData = await response.json();
-      const tasks = resData.tasks || [];
-
+      const tasks = (resData && resData.tasks) || [];
       if (tasks.length === 0) {
         throw new Error('No conversion tasks created');
       }
@@ -520,7 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>
         </div>
-        <a href="${res.download_url}" class="btn-download" download="${pptxName}">
+        <a href="${window.getApiUrl(res.download_url)}" class="btn-download" download="${pptxName}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
@@ -541,7 +574,9 @@ document.addEventListener('DOMContentLoaded', () => {
     resultsCard.style.display = 'none';
     selectedFiles = [];
     renderFileList();
-    pageRangeInput.value = '';
+    if (pageRangeInput) {
+      pageRangeInput.value = '';
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 });

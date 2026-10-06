@@ -74,24 +74,10 @@ class PreviewManager {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/preview', {
+      const { data } = await window.safeFetch('/api/preview', {
         method: 'POST',
         body: formData
       });
-
-      if (!response.ok) {
-        let errMsg = 'Failed to render previews';
-        try {
-          const err = await response.json();
-          errMsg = err.detail || errMsg;
-        } catch (_) {
-          const text = await response.text();
-          errMsg = text || `Server error (${response.status})`;
-        }
-        throw new Error(errMsg);
-      }
-
-      const data = await response.json();
       this.totalPages = data.total_pages;
       this.subtitle.textContent = `${this.totalPages} pages detected. Click any slide to include or exclude.`;
 
